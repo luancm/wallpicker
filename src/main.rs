@@ -1,20 +1,21 @@
-use dirs;
-use std::io::Write;
+use std::fs::remove_file;
+use std::io::{ErrorKind, Write};
+use std::process::{Command, Stdio};
 use std::{collections::HashMap, fs, path::Path};
 
 const PROGRAM_NAME: &str = "Wallpicker";
+const SUPPORTED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "bmp", "gif"];
 
 fn find_wallpapers(dir_path: &Path) -> HashMap<String, String> {
     // read only image files
-    fs::read_dir(&dir_path)
+    fs::read_dir(dir_path)
         .expect("Failed to read wallpapers directory")
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
             let extension = path.extension()?.to_str()?.to_lowercase();
-            let image_extensions = ["jpg", "jpeg", "png", "bmp", "gif"];
 
-            if !image_extensions.contains(&extension.as_str()) {
+            if !SUPPORTED_EXTENSIONS.contains(&extension.as_str()) {
                 return None;
             }
 
@@ -26,7 +27,7 @@ fn find_wallpapers(dir_path: &Path) -> HashMap<String, String> {
 }
 
 fn notify(message: &str) {
-    std::process::Command::new("notify-send")
+    Command::new("notify-send")
         .arg(PROGRAM_NAME)
         .arg(message)
         .output()
@@ -44,18 +45,19 @@ fn notify(message: &str) {
 /// * `Option<String>` - The full path of the selected wallpaper
 fn select_wallpaper(wallpapers: &HashMap<String, String>) -> Option<String> {
     println!("Opening Walker in dmenu mode to select a wallpaper...");
-    let mut walker_process = std::process::Command::new("walker")
+    let mut walker_process = Command::new("walker")
         .args(["--dmenu", "--placeholder", "Select a wallpaper"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to spawn walker");
 
     {
         let stdin = walker_process.stdin.as_mut().expect("Failed to open stdin");
-        for filename in wallpapers.keys() {
-            writeln!(stdin, "{}", filename).expect("Failed to write to stdin");
-        }
+        wallpapers
+            .keys()
+            .try_for_each(|filename| writeln!(stdin, "{}", filename))
+            .ok()?
     } // stdin drops here, closing the pipe
 
     let output = walker_process
@@ -72,7 +74,7 @@ fn select_wallpaper(wallpapers: &HashMap<String, String>) -> Option<String> {
 }
 
 fn set_wallpaper(wallpaper_path: &str) {
-    let swww_process = std::process::Command::new("swww")
+    let swww_process = Command::new("swww")
         .args(["img", wallpaper_path])
         .args(["--transition-type", "wipe"])
         .args(["--transition-fps", "60"])
@@ -89,8 +91,8 @@ fn set_wallpaper(wallpaper_path: &str) {
         .expect("Failed to get home directory")
         .join(".cache/current_wallpaper");
 
-    if let Err(e) = std::fs::remove_file(&wallpaper_cache_path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
+    if let Err(e) = remove_file(&wallpaper_cache_path) {
+        if e.kind() != ErrorKind::NotFound {
             eprintln!("Failed to remove existing wallpaper cache file: {}", e);
             return;
         }
@@ -127,4 +129,6 @@ fn main() {
     println!("Selected wallpaper: {}", selected_file);
 
     set_wallpaper(&selected_file);
+
+    notify(&format!("Wallpaper set to {}", selected_file));
 }
