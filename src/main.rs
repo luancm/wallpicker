@@ -11,10 +11,10 @@ fn find_wallpapers(dir_path: &Path) -> HashMap<String, String> {
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            let extentsion = path.extension()?.to_str()?.to_lowercase();
+            let extension = path.extension()?.to_str()?.to_lowercase();
             let image_extensions = ["jpg", "jpeg", "png", "bmp", "gif"];
 
-            if !image_extensions.contains(&extentsion.as_str()) {
+            if !image_extensions.contains(&extension.as_str()) {
                 return None;
             }
 
